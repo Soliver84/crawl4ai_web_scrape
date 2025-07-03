@@ -28,7 +28,6 @@ import aiohttp
 import asyncio
 import openai
 import re
-import json
 from typing import Callable, Optional, Awaitable, Dict, Any, List
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -36,6 +35,13 @@ import time
 import urllib.parse
 import gc
 from urllib.parse import urlparse
+try:
+    from crawl4ai import BrowserConfig, CrawlerRunConfig
+    HAVE_CRAWL4AI = True
+except ImportError:  # Fallback if crawl4ai is not installed
+    BrowserConfig = None
+    CrawlerRunConfig = None
+    HAVE_CRAWL4AI = False
 
 
 DEFAULT_OLLAMA_SYSTEM_PROMPT = (
@@ -728,18 +734,43 @@ class Tools:
             poll_interval=self.valves.POLL_INTERVAL_SECONDS,
         )
 
-        req_data = {
-            "urls": url,
-            "crawler_params": {
-                "headless": self.valves.HEADLESS_MODE,
-                "browser_type": self.valves.BROWSER_TYPE,
-                "user_agent": self.valves.USER_AGENT,
-                "simulate_user": self.valves.SIMULATE_USER,
-                "magic": self.valves.ENABLE_MAGIC_MODE,
-                "override_navigator": self.valves.OVERRIDE_NAVIGATOR,
-            },
-            "extra": {"only_text": not self.valves.INCLUDE_IMAGES},
-        }
+        if HAVE_CRAWL4AI:
+            browser_cfg = (
+                BrowserConfig(
+                    headless=self.valves.HEADLESS_MODE,
+                    browser_type=self.valves.BROWSER_TYPE,
+                    user_agent=self.valves.USER_AGENT,
+                    override_navigator=self.valves.OVERRIDE_NAVIGATOR,
+                ).dump()
+            )
+
+            crawl_cfg = (
+                CrawlerRunConfig(
+                    simulate_user=self.valves.SIMULATE_USER,
+                    magic=self.valves.ENABLE_MAGIC_MODE,
+                    timeout=self.valves.TIMEOUT_SECONDS,
+                ).dump()
+            )
+
+            req_data = {
+                "urls": [url],
+                "browser_config": browser_cfg,
+                "crawler_config": crawl_cfg,
+                "extra": {"only_text": not self.valves.INCLUDE_IMAGES},
+            }
+        else:
+            req_data = {
+                "urls": url,
+                "crawler_params": {
+                    "headless": self.valves.HEADLESS_MODE,
+                    "browser_type": self.valves.BROWSER_TYPE,
+                    "user_agent": self.valves.USER_AGENT,
+                    "simulate_user": self.valves.SIMULATE_USER,
+                    "magic": self.valves.ENABLE_MAGIC_MODE,
+                    "override_navigator": self.valves.OVERRIDE_NAVIGATOR,
+                },
+                "extra": {"only_text": not self.valves.INCLUDE_IMAGES},
+            }
 
         # Respect optional CSS selector override
         selector = self.valves.CSS_SELECTOR_OVERRIDE or self.valves.CSS_SELECTOR
