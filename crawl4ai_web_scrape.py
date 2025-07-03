@@ -5,7 +5,8 @@ author: BrandXX/UserX
 author_url: https://github.com/BrandXX/open-webui/
 funding_url: https://github.com/BrandXX/open-webui/
 repo_url: https://github.com/BrandXX/open-webui/edit/main/tools/crawl4ai_web_scrape/
-version: 1.4.1
+version: 1.5.0
+requirements: openai>=1.0.0
 required_open_webui_version: 0.3.9
 Notes:
 Thanks to 'focuses' over at the Open-WebUI community for providing the initial code @ https://openwebui.com/t/focuses/crawl4ai_web_scrape
@@ -25,6 +26,7 @@ Key functionality:
 
 import aiohttp
 import asyncio
+import openai
 import re
 import json
 from typing import Callable, Optional, Awaitable, Dict, Any, List
@@ -35,6 +37,19 @@ import urllib.parse
 import gc
 from urllib.parse import urlparse
 
+
+DEFAULT_OLLAMA_SYSTEM_PROMPT = (
+    "You have no external knowledge beyond what the user provides. "
+    "The user has given you a topic or request, and you must base your search queries strictly on that topic. "
+    "If the user references something unknown or ambiguous, do not guess or invent details. "
+    "Simply reflect the user's request in your queries.\n\n"
+    "You will produce exactly 3 to 5 short search queries, separated by semicolons, with no disclaimers or commentary. "
+    "Avoid referencing any events, data, or specifics not explicitly mentioned by the user. "
+    "If you do not recognize the user's topic, you still create queries focusing on the user's exact request, without speculation.\n\n"
+    "Your entire output must consist only of these 3 to 5 queries. No disclaimers, no extra words."
+)
+
+DEFAULT_OPENAI_SYSTEM_PROMPT = DEFAULT_OLLAMA_SYSTEM_PROMPT
 
 class Event(Enum):
     """
@@ -233,6 +248,31 @@ class Tools:
             description="Name of the Ollama LLM to use for query generation. If empty, fallback expansions are used.",
             advanced=False,
         )
+        USE_OPENAI_FOR_QUERIES: bool = Field(
+            default=False,
+            description="Use OpenAI API instead of Ollama for query generation",
+            advanced=False,
+        )
+        OPENAI_API_KEY: str = Field(
+            default="",
+            description="API key for OpenAI when USE_OPENAI_FOR_QUERIES is True",
+            advanced=False,
+        )
+        OPENAI_MODEL: str = Field(
+            default="gpt-3.5-turbo",
+            description="OpenAI model to use for query generation",
+            advanced=True,
+        )
+        OLLAMA_SYSTEM_PROMPT: str = Field(
+            default=DEFAULT_OLLAMA_SYSTEM_PROMPT,
+            description="System prompt for Ollama query generation",
+            advanced=True,
+        )
+        OPENAI_SYSTEM_PROMPT: str = Field(
+            default=DEFAULT_OPENAI_SYSTEM_PROMPT,
+            description="System prompt for OpenAI query generation",
+            advanced=True,
+        )
 
         # Crawl4AI + SearxNG valves
         CRAWL4AI_URL: str = Field(
@@ -404,35 +444,49 @@ class Tools:
             print(f"Error calling Ollama: {e}")
             return ""
 
+    async def call_openai(
+        self, model_name: str, system_prompt: str, user_query: str
+    ) -> str:
+        """Call the OpenAI Chat Completions API asynchronously."""
+        try:
+            client = openai.AsyncOpenAI(api_key=self.valves.OPENAI_API_KEY)
+            resp = await client.chat.completions.create(
+                model=model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_query},
+                ],
+                stream=False,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"Error calling OpenAI: {e}")
+            return ""
+
     async def generate_queries(self, user_query: str) -> List[str]:
-        """
-        Generate short, semicolon-delimited queries from user input via Ollama.
-        - If OLLAMA_QUERY_MODEL is empty, return trivial expansions.
-        - Otherwise, call `call_ollama` using system instructions for narrow output.
-        :param user_query: The user’s topic or request.
-        :return: A list of 3-5 short queries or fallback expansions.
-        """
-        model_name = (self.valves.OLLAMA_QUERY_MODEL or "").strip()
-        # If no model is provided, fallback to trivial expansions
+        """Generate short queries from user input using Ollama or OpenAI."""
+        if self.valves.USE_OPENAI_FOR_QUERIES:
+            model_name = (self.valves.OPENAI_MODEL or "").strip()
+        else:
+            model_name = (self.valves.OLLAMA_QUERY_MODEL or "").strip()
+
         if not model_name:
             return [user_query, f"{user_query} info", f"{user_query} research"]
 
-        # New system instructions focusing on user-supplied topic only
         system_instructions = (
-            "You have no external knowledge beyond what the user provides. "
-            "The user has given you a topic or request, and you must base your search queries strictly on that topic. "
-            "If the user references something unknown or ambiguous, do not guess or invent details. "
-            "Simply reflect the user’s request in your queries.\n\n"
-            "You will produce exactly 3 to 5 short search queries, separated by semicolons, with no disclaimers or commentary. "
-            "Avoid referencing any events, data, or specifics not explicitly mentioned by the user. "
-            "If you do not recognize the user’s topic, you still create queries focusing on the user’s exact request, without speculation.\n\n"
-            "Your entire output must consist only of these 3 to 5 queries. No disclaimers, no extra words."
+            self.valves.OPENAI_SYSTEM_PROMPT
+            if self.valves.USE_OPENAI_FOR_QUERIES
+            else self.valves.OLLAMA_SYSTEM_PROMPT
         )
 
-        # Call Ollama for the generation
-        raw_response = await self.call_ollama(
-            model_name, system_instructions, user_query
-        )
+        if self.valves.USE_OPENAI_FOR_QUERIES:
+            raw_response = await self.call_openai(
+                model_name, system_instructions, user_query
+            )
+        else:
+            raw_response = await self.call_ollama(
+                model_name, system_instructions, user_query
+            )
 
         # Parse the semicolon-delimited output
         parts = [r.strip() for r in raw_response.split(";") if r.strip()]
