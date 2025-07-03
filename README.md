@@ -23,6 +23,7 @@ AI Researcher performs the following:
 
 - **Asynchronous Efficiency:** Rapid scraping without workflow interruptions.
 - **AI-Powered Queries:** Ollama-generated queries improve search relevance.
+- **OpenAI Support:** Optionally use the OpenAI API for query generation.
 - **Advanced Ranking:** Intelligent URL ranking prioritizes high-quality sources.
 - **Customizable Valves:** Tailor scraping and output parameters easily.
 - **Memory & Stability Optimizations:** Safeguards prevent excessive memory usage and gracefully handle errors.
@@ -36,6 +37,11 @@ AI Researcher performs the following:
   - `OLLAMA_ENDPOINT`: Default: `http://host.docker.internal:11434`
   - `OLLAMA_QUERY_MODEL`: Default: `llama3.2:latest`
     - (specifically used for generating search queries)
+- **OpenAI Settings:**
+  - `USE_OPENAI_FOR_QUERIES`: Default: `False`
+  - `OPENAI_API_KEY`: Your OpenAI API key
+  - `OPENAI_MODEL`: Default: `gpt-3.5-turbo`
+  - `OLLAMA_SYSTEM_PROMPT` and `OPENAI_SYSTEM_PROMPT`: Customizable system prompts for query generation
 
 - **Connection Settings:**  
   - `CRAWL4AI_URL`: Default: `http://crawl4ai:11235/`
