@@ -2,7 +2,7 @@
 
 Welcome to the *AI Researcher* tool for Open-WebUI! This advanced, robust, and configurable web scraping tool integrates Crawl4AI, Ollama, and SearXNG to perform targeted research tasks effortlessly. From generating precise search queries to concurrent scraping and content ranking, AI Researcher securely handles complex research workflows. Ready to level up your web scraping? Let's dive in!  
   - Notes
-     - This tool is being ranmed and branded as "AI Researcher". Further iterations of this tool are going to be located under 'AI Researcher' within the tools section.
+     - This tool is being renamed and branded as "AI Researcher". Further iterations of this tool are going to be located under 'AI Researcher' within the tools section.
 
 ---
 

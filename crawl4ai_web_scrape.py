@@ -28,7 +28,6 @@ import aiohttp
 import asyncio
 import openai
 import re
-import json
 from typing import Callable, Optional, Awaitable, Dict, Any, List
 from enum import Enum
 from pydantic import BaseModel, Field
@@ -36,6 +35,13 @@ import time
 import urllib.parse
 import gc
 from urllib.parse import urlparse
+try:
+    from crawl4ai import BrowserConfig, CrawlerRunConfig
+    HAVE_CRAWL4AI = True
+except ImportError:  # Fallback if crawl4ai is not installed
+    BrowserConfig = None
+    CrawlerRunConfig = None
+    HAVE_CRAWL4AI = False
 
 
 DEFAULT_OLLAMA_SYSTEM_PROMPT = (
@@ -111,7 +117,9 @@ class Crawler:
             token = self.token
         if timeout == 0:
             timeout = self.timeout
-        headers = {"Authorization": f"Bearer {token}"}
+        headers = {}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
 
         async with aiohttp.ClientSession(headers=headers) as session:
             endpoint = self.get_crawler_url("crawl")
@@ -124,8 +132,9 @@ class Crawler:
                 # Submit the crawl job
                 async with session.post(endpoint, json=request_data) as response:
                     if response.status != 200:
+                        detail = await response.text()
                         raise Exception(
-                            f"Failed to submit task: HTTP {response.status}"
+                            f"Failed to submit task: HTTP {response.status} - {detail}"
                         )
                     response_json = await response.json()
                     task_id = response_json.get("task_id")
@@ -728,18 +737,49 @@ class Tools:
             poll_interval=self.valves.POLL_INTERVAL_SECONDS,
         )
 
-        req_data = {
-            "urls": url,
-            "crawler_params": {
+        urls_list = [url] if isinstance(url, str) else url
+        if HAVE_CRAWL4AI:
+            browser_cfg = (
+                BrowserConfig(
+                    headless=self.valves.HEADLESS_MODE,
+                    browser_type=self.valves.BROWSER_TYPE,
+                    user_agent=self.valves.USER_AGENT,
+                    override_navigator=self.valves.OVERRIDE_NAVIGATOR,
+                ).dump()
+            )
+
+            crawl_cfg = (
+                CrawlerRunConfig(
+                    simulate_user=self.valves.SIMULATE_USER,
+                    magic=self.valves.ENABLE_MAGIC_MODE,
+                    timeout=self.valves.TIMEOUT_SECONDS,
+                ).dump()
+            )
+
+            req_data = {
+                "urls": urls_list,
+                "browser_config": browser_cfg,
+                "crawler_config": crawl_cfg,
+                "extra": {"only_text": not self.valves.INCLUDE_IMAGES},
+            }
+        else:
+            browser_cfg = {
                 "headless": self.valves.HEADLESS_MODE,
                 "browser_type": self.valves.BROWSER_TYPE,
                 "user_agent": self.valves.USER_AGENT,
+                "override_navigator": self.valves.OVERRIDE_NAVIGATOR,
+            }
+            crawl_cfg = {
                 "simulate_user": self.valves.SIMULATE_USER,
                 "magic": self.valves.ENABLE_MAGIC_MODE,
-                "override_navigator": self.valves.OVERRIDE_NAVIGATOR,
-            },
-            "extra": {"only_text": not self.valves.INCLUDE_IMAGES},
-        }
+                "timeout": self.valves.TIMEOUT_SECONDS,
+            }
+            req_data = {
+                "urls": urls_list,
+                "browser_config": browser_cfg,
+                "crawler_config": crawl_cfg,
+                "extra": {"only_text": not self.valves.INCLUDE_IMAGES},
+            }
 
         # Respect optional CSS selector override
         selector = self.valves.CSS_SELECTOR_OVERRIDE or self.valves.CSS_SELECTOR
@@ -754,7 +794,7 @@ class Tools:
                 return "No content was retrieved from the webpage."
 
             # Truncate overly large content
-            max_size = 10 * 1024 * 1024
+            max_size = 10 * 1024 * 1024   # 10 MiB
             if len(markdown) > max_size:
                 markdown = markdown[:max_size] + "\n\n[Content truncated due to size]"
 
