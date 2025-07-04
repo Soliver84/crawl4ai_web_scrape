@@ -142,7 +142,18 @@ class Crawler:
                     response_json = await response.json()
                     task_id = response_json.get("task_id")
                     if not task_id:
-                        raise Exception(f"task_id missing in response: {response_json}")
+                        # Some Crawl4AI deployments return results directly
+                        direct_keys = [k.lower() for k in response_json.keys()]
+                        if "result" in direct_keys or "results" in direct_keys:
+                            if hook:
+                                await hook(
+                                    Event.FINISHED,
+                                    {"task_id": None, "status": "completed"},
+                                )
+                            return response_json
+                        raise Exception(
+                            f"task_id missing in response: {response_json}"
+                        )
 
                 start_time = time.time()
 
@@ -364,7 +375,7 @@ class Tools:
             advanced=False,
         )
         MAX_CONTENT_LENGTH: int = Field(
-            default=0,
+            default=20000,
             description="Max length of output markdown (0 for no limit)",
             advanced=True,
         )
@@ -788,7 +799,21 @@ class Tools:
         try:
             # Submit the scraping job to Crawl4AI and wait for completion
             result = await crawler.submit_and_wait(req_data, hook=hook)
-            markdown = result.get("result", {}).get("markdown", "")
+
+            markdown = ""
+            if isinstance(result, dict):
+                if "result" in result:
+                    markdown = result.get("result", {}).get("markdown", "")
+                elif "results" in result and isinstance(result["results"], list):
+                    parts = []
+                    for item in result["results"]:
+                        if isinstance(item, dict):
+                            if "markdown" in item:
+                                parts.append(item["markdown"])
+                            elif isinstance(item.get("result"), dict):
+                                parts.append(item["result"].get("markdown", ""))
+                    markdown = "\n\n".join([p for p in parts if p])
+
             if not markdown:
                 return "No content was retrieved from the webpage."
 
