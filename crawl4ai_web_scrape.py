@@ -143,9 +143,11 @@ class Crawler:
                     task_id = response_json.get("task_id")
                     if not task_id:
                         # Some Crawl4AI deployments return results directly
+
                         # Normalize keys for case-insensitive lookup
                         keys_lower = [k.lower() for k in response_json.keys()]
                         if "result" in keys_lower or "results" in keys_lower:
+
                             if hook:
                                 await hook(
                                     Event.FINISHED,
