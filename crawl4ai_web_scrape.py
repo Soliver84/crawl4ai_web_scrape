@@ -810,12 +810,21 @@ class Tools:
                 elif "results" in result and isinstance(result["results"], list):
                     parts = []
                     for item in result["results"]:
-                        if isinstance(item, dict):
-                            if "markdown" in item:
-                                parts.append(item["markdown"])
-                            elif isinstance(item.get("result"), dict):
-                                parts.append(item["result"].get("markdown", ""))
-                    markdown = "\n\n".join([p for p in parts if p])
+                        if not isinstance(item, dict):
+                            continue
+
+                        if "markdown" in item:
+                            md = item["markdown"]
+                            if isinstance(md, dict):
+                                md = md.get("markdown", "")
+                            if isinstance(md, str):
+                                parts.append(md)
+                        elif isinstance(item.get("result"), dict):
+                            md = item["result"].get("markdown", "")
+                            if isinstance(md, str):
+                                parts.append(md)
+
+                    markdown = "\n\n".join([p for p in parts if isinstance(p, str) and p])
 
             if not markdown:
                 return "No content was retrieved from the webpage."
