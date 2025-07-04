@@ -68,7 +68,7 @@ AI Researcher performs the following:
 - **Content Filtering & Output:**
   - `CLEANUP_REGEX`: Default regex provided for markdown cleaning.
   - `INCLUDE_IMAGES`: Default: `False`
-  - `MAX_CONTENT_LENGTH`: Default: `0` (No limit)
+  - `MAX_CONTENT_LENGTH`: Default: `20000`
   - `CITATION_STYLE`: Options: `inline`, `footnote`, `endnotes` (Default: `inline`)
 
 ---
