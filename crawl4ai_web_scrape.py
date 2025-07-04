@@ -857,3 +857,14 @@ class Tools:
             # Any exception is reported as an error state
             await emitter.error_update(f"❌ Error during web scrape: {str(e)}")
             return f"Error scraping web page: {str(e)}"
+__all__ = ["Tools"]
+
+if __name__ == "__main__":
+    import asyncio
+
+    async def _demo(query: str):
+        tool = Tools()
+        result = await tool.search_and_scrape(query)
+        print(result)
+
+    asyncio.run(_demo("OpenAI"))
