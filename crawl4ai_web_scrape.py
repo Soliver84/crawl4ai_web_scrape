@@ -143,7 +143,11 @@ class Crawler:
                     task_id = response_json.get("task_id")
                     if not task_id:
                         # Some Crawl4AI deployments return results directly
-                        if "result" in response_json or "results" in response_json:
+
+                        # Normalize keys for case-insensitive lookup
+                        keys_lower = [k.lower() for k in response_json.keys()]
+                        if "result" in keys_lower or "results" in keys_lower:
+
                             if hook:
                                 await hook(
                                     Event.FINISHED,
@@ -798,7 +802,21 @@ class Tools:
         try:
             # Submit the scraping job to Crawl4AI and wait for completion
             result = await crawler.submit_and_wait(req_data, hook=hook)
-            markdown = result.get("result", {}).get("markdown", "")
+
+            markdown = ""
+            if isinstance(result, dict):
+                if "result" in result:
+                    markdown = result.get("result", {}).get("markdown", "")
+                elif "results" in result and isinstance(result["results"], list):
+                    parts = []
+                    for item in result["results"]:
+                        if isinstance(item, dict):
+                            if "markdown" in item:
+                                parts.append(item["markdown"])
+                            elif isinstance(item.get("result"), dict):
+                                parts.append(item["result"].get("markdown", ""))
+                    markdown = "\n\n".join([p for p in parts if p])
+
             if not markdown:
                 return "No content was retrieved from the webpage."
 
