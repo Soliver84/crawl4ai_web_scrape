@@ -142,7 +142,17 @@ class Crawler:
                     response_json = await response.json()
                     task_id = response_json.get("task_id")
                     if not task_id:
-                        raise Exception(f"task_id missing in response: {response_json}")
+                        # Some Crawl4AI deployments return results directly
+                        if "result" in response_json or "results" in response_json:
+                            if hook:
+                                await hook(
+                                    Event.FINISHED,
+                                    {"task_id": None, "status": "completed"},
+                                )
+                            return response_json
+                        raise Exception(
+                            f"task_id missing in response: {response_json}"
+                        )
 
                 start_time = time.time()
 
@@ -364,7 +374,7 @@ class Tools:
             advanced=False,
         )
         MAX_CONTENT_LENGTH: int = Field(
-            default=0,
+            default=20000,
             description="Max length of output markdown (0 for no limit)",
             advanced=True,
         )
